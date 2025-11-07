@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wanikani Dashboard Progress Plus 2
 // @namespace    Wanikani prouleau
-// @version      4.1.0
+// @version      4.0.1
 // @description  Display detailed level progress
 // @author       prouleau, adapted from Robin Findley
 // @match        https://www.wanikani.com/*
@@ -9,8 +9,6 @@
 // @license      MIT; http://opensource.org/licenses/MIT
 // @run-at       document-start
 // @grant        none
-// @downloadURL https://update.greasyfork.org/scripts/531933/Wanikani%20Dashboard%20Progress%20Plus%202.user.js
-// @updateURL https://update.greasyfork.org/scripts/531933/Wanikani%20Dashboard%20Progress%20Plus%202.meta.js
 // ==/UserScript==
 
 (function(gobj) {
@@ -43,12 +41,8 @@
         .then(load_settings)
         .then(startup)
 
-    window.addEventListener("turbo:load", (e) => {
-        if (e.detail.url !== 'https://www.wanikani.com/dashboard' && e.detail.url !== 'https://www.wanikani.com/#' &&
-            e.detail.url !== 'https://www.wanikani.com/'){
-            return;
-        };
-        if (wkof.get_state('dpp_init') !== 'ready'){return;} // page load is triggered when startup is already ongoing
+    window.addEventListener("turbo:load", () => {
+        if (wkof.get_state('dpp_init') !== 'ready'){return;} // repage load is triggered when startup is already ongoing
         wkof.set_state('dpp_init', 'ongoing')
         setTimeout(init, 0);
     });
@@ -60,7 +54,6 @@
     function load_settings() {
         let defaults = {
             position: 'Bottom',
-            afterBefore: 'inCell',
             sortOrder: 'Ascending',
             show_90percent: true,
             show_char: true,
@@ -79,11 +72,11 @@
 
     //========================================================================
     // Open the settings dialog
-    //------------------------------------------------------------------------
-    var oldPosition, old_afterBefore;
+    //-------------------------------------------------------------------
     function open_settings() {
-        oldPosition = settings.position;
-        old_afterBefore = settings.afterBefore;
+        let positionHoverTip = 'Where on the dashboard to install Dashboard Progress Plus 2\n\n'+
+                               'If there is an unused widget box in the selected row the script\n'+
+                               'will use it. Otherwise it will insert before the selected row.'
         let config = {
             script_id: 'dpp',
             title: 'Dashboard Progress Plus',
@@ -91,16 +84,12 @@
             content: {
                 tabs: {type:'tabset', content: {
                     pgLayout: {type:'page', label:'Main View', hover_tip:'Settings for the main view.', content: {
-                        position:{type: 'dropdown', label: 'Position', default: 1, hover_tip: 'Where on the dashboard to install Dashboard Progress Plus 2',
-                                  content: {0: "Top", 1: "Bottom", 2: '1st widget row', 3: '2nd widget row',
-                                            4: '3rd widget row', 5: '4th widget row', 6: '5th widget row',
-                                            7: '6th widget row', 8: '7th widget row', 9: '8th widget row',},
+                        position:{type: 'dropdown', label: 'Position', default: 1, hover_tip: positionHoverTip,
+                                  content: {0: "Top", 1: "Bottom", 2: '1st widget row or before', 3: '2nd widget row or before',
+                                            4: '3rd widget row or before', 5: '4th widget row or before', 6: '5th widget row or before',
+                                            7: '6th widget row or before', 8: '7th widget row or before', 9: '8th widget row or before',},
                                  },
-                        afterBefore: {type: 'dropdown', label: 'After/Before the Selected Row', default: 'inCell',
-                                      hover_tip: 'Insert Dashboard Progress Plus after or before the selected row.\nIn Widget Cell will attempt to place the script in an\nempty widget cell.',
-                                      content: {After: 'After', Before: 'Before', inCell: 'In widget Cell'},
-                                     },
-                        sortOrder:{type: 'dropdown', label: 'Sort Order', default: 'Ascending', hover_tip: 'the order of srs stage Afterused to display item',
+                        sortOrder:{type: 'dropdown', label: 'Sort Order', default: 'Ascending', hover_tip: 'the order of srs stage used to display item',
                                   content:{Ascending: 'Ascending', Descending: 'Descending'},},
                         show_90percent: {type:'checkbox', label:'Show 90% Bracket', default:true, hover_tip:'Show the bracket around 90% of items.'},
                         show_char: {type:'checkbox', label:'Show Kanji/Radical', default:true, hover_tip:'Show the kanji or radical inside each tile.'},
@@ -126,15 +115,10 @@
     //========================================================================
     // Handler for when user clicks 'Save' in the settings window.
     //-------------------------------------------------------------------
-    async function settings_saved(new_settings) {
-        await wkof.wait_state('dpp_init', 'ready');
-        wkof.set_state('dpp_init', 'ongoing');
-        if (oldPosition !== settings.position || old_afterBefore !== settings.afterBefore) {
-            insert_container();
-        } else {
-            let $container = $('#dppContainer');
-            $container.empty();
-        };
+    function settings_saved(new_settings) {
+        if (wkof.get_state('dpp_init') !== 'ready'){return;} // repage load is triggered when startup is already ongoing
+        wkof.set_state('dpp_init', 'ongoing')
+        insert_container();
         populate_dashboard().then(function(){wkof.set_state('dpp_init', 'ready')});
     };
 
@@ -149,7 +133,6 @@
     var items;
     function init(){
         if (document.querySelector('.dashboard__content') === null) {
-            console.log('dpp - looping in init');
             setTimeout(init, 200);
             return Promise.resolved;
         } else {
@@ -263,29 +246,34 @@
             // Must insert on nth line of widgets
             let settingPosition = Number(position) - 2;
 
-            let cssPosition = '.dashboard__content > .dashboard__row';
-            let $cssPosition = $(cssPosition).eq(settingPosition);
-            if ($cssPosition.length !== 0 && settings.afterBefore === 'inCell') {
+            // All vanilla dashboard rows are div. The selector used is nevetheless
+            // a wildcard * selector. This is because we need to handle scripts
+            // that insert themselves in the dashboard in a section or something
+            // else that is not a div.
+
+            let cssPosition = '.dashboard__content > *:first-child';
+            for (let n = 1; n <= settingPosition; n++){
+                cssPosition += ' + *';
+            };
+            let $cssPosition = $(cssPosition);
+            if ($cssPosition.length > 0) {
                 let $childPosition = $cssPosition.children();
                 let found = false;
-                let n, $cellPosition;
+                let n;
                 for (n = 0; n < $childPosition.length; n++) {
-                    $cellPosition = $($childPosition[n]);
-                    if ($cellPosition.children().length === 0){
+                    if ($($childPosition[n]).children().length === 0){
                         found = true;
                         break;
                     };
                 };
                 if (found) {
-                    let dppContainerInCell = "<div id='dppContainer'></div>";
-                    $cellPosition.append(dppContainerInCell);
+                    let dppContainer = "<div id='dppContainer'></div>";
+                    $($childPosition[n]).append(dppContainer);
                 } else {
                     $cssPosition.before(dppContainer);
                 };
-            } else if (settings.afterBefore === "After"){
-                $cssPosition.after(dppContainer);
             } else {
-                $cssPosition.before(dppContainer);
+                $(dasboardPosition).after(dppContainer);
             };
         };
     };
