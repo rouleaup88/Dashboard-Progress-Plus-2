@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wanikani Dashboard Progress Plus 2
 // @namespace    Wanikani prouleau
-// @version      4.2.1
+// @version      4.2.2
 // @description  Display detailed level progress
 // @author       prouleau, adapted from Robin Findley
 // @match        https://www.wanikani.com/*
@@ -423,6 +423,7 @@
 
             let blockItem = '';
 
+            console.log('dpp checking item', item.object);
             if (!item.assignments || item.assignments.unlocked_at === null){ //locked item
                 descriptor.srs_stage = -1;
                 blockItem += '<div class="dppItem dppLockedItem '+item.object+'">'+characters+'</div>';
@@ -496,7 +497,7 @@
 
         let content = [];
         for (let descriptor of descriptors){
-            content.push('<div class="dppBlockItem '+descriptor.topClasses+'">');
+            content.push('<div class="dppBlockItem'+(descriptor.topClasses ? ' '+descriptor.topClasses : '')+'">');
             content.push(descriptor.body);
             if (settings.enable_popup) content.push(descriptor.popup);
             content.push('</div>');
